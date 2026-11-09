@@ -1,0 +1,67 @@
+# ==============================================================================
+# Git Ignore Rules - Automated Security Compliance & Configuration Drift Detection
+# ==============================================================================
+
+# OS generated files
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor and IDE directories
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# Cloud credentials, keys and secrets (CRITICAL: Never commit credentials)
+*.pem
+*.key
+*.pkcs12
+*.pfx
+*.ppk
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+*.id_rsa
+*.id_rsa.pub
+credentials
+credentials.csv
+*.env
+*.env.local
+*.env.*.local
+.terraform/
+*.tfvars
+*.tfstate
+*.tfstate.backup
+
+# Puppet local runtime files & caches
+puppet/ssl/
+.puppet/
+*.rrd
+*.cache
+
+# Nagios runtime files & spool
+nagios.log
+nagios.tmp
+status.dat
+objects.cache
+retention.dat
+*.pid
+*.sock
+
+# Test outputs and temporary logs
+*.log
+tests/logs/
+tmp/
+scratch/
+
