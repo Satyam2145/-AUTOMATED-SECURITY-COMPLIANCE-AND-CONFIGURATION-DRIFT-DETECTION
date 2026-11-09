@@ -1,0 +1,51 @@
+<%- | String  $permit_root_login,
+      String  $password_authentication,
+      Integer $max_auth_tries
+| -%>
+# ==============================================================================
+# OpenSSH Server Configuration - Hardened Security Baseline
+# Managed Declaratively by Puppet. Local modifications will be overwritten.
+# ==============================================================================
+
+# Network and Port Binding
+Port 22
+AddressFamily any
+ListenAddress 0.0.0.0
+
+# Host Keys
+HostKey /etc/ssh/ssh_host_rsa_key
+HostKey /etc/ssh/ssh_host_ecdsa_key
+HostKey /etc/ssh/ssh_host_ed25519_key
+
+# Authentication and Authorization Policy
+PermitRootLogin <%= $permit_root_login %>
+PasswordAuthentication <%= $password_authentication %>
+PermitEmptyPasswords no
+PubkeyAuthentication yes
+AuthorizedKeysFile .ssh/authorized_keys
+
+# Session Limits and Rate Limiting
+MaxAuthTries <%= $max_auth_tries %>
+MaxSessions 10
+LoginGraceTime 60
+ClientAliveInterval 300
+ClientAliveCountMax 2
+
+# Access Surface Minimization
+X11Forwarding no
+AllowTcpForwarding yes
+AllowAgentForwarding no
+IgnoreRhosts yes
+HostbasedAuthentication no
+
+# Privileges and Environment
+StrictModes yes
+UsePAM yes
+PrintMotd no
+PrintLastLog yes
+TCPKeepAlive yes
+AcceptEnv LANG LC_*
+
+# Subsystems
+Subsystem sftp /usr/lib/openssh/sftp-server
+
