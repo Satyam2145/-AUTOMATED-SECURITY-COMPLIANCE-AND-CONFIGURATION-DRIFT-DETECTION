@@ -1,0 +1,16 @@
+# ==============================================================================
+# Ansible Inventory Example: inventory/hosts.ini.example
+# Update IPs with your live EC2 Public and Private IPv4 addresses
+# ==============================================================================
+
+[mgmt_server]
+puppetmaster ansible_host=65.0.6.110 private_ip=172.31.6.20
+
+[client_nodes]
+client ansible_host=13.233.10.150 private_ip=172.31.10.179
+
+[all:vars]
+ansible_user=ubuntu
+ansible_ssh_private_key_file=~/.ssh/devops-sec-key.pem
+ansible_python_interpreter=/usr/bin/python3
+ansible_ssh_common_args='-o StrictHostKeyChecking=no'

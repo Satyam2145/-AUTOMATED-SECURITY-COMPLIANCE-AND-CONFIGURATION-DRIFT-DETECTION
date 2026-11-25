@@ -1,0 +1,173 @@
+---
+# ==============================================================================
+# Master Playbook: site.yml
+# Purpose: Complete zero-touch end-to-end automation across Management Server
+#          and Managed Client nodes.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Stage 1: Network & Hostname Orchestration
+# ------------------------------------------------------------------------------
+- name: "Stage 1: Configure Networking & /etc/hosts on All Nodes"
+  import_playbook: bootstrap_hosts.yml
+
+# ------------------------------------------------------------------------------
+# Stage 2: Management Server Setup (Puppet Server + Nagios Core)
+# ------------------------------------------------------------------------------
+- name: "Stage 2: Provision Management Authority (Instance 1)"
+  hosts: mgmt_server
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Create 2GB swap file to prevent JVM Out-Of-Memory on t3.micro/t3.medium
+      ansible.builtin.shell: |
+        if [ ! -f /swapfile ]; then
+          fallocate -l 2G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=2048
+          chmod 600 /swapfile
+          mkswap /swapfile
+          swapon /swapfile
+          echo '/swapfile none swap sw 0 0' >> /etc/fstab
+        fi
+      args:
+        creates: /swapfile
+
+    - name: Install base build dependencies and Apache
+      ansible.builtin.apt:
+        name:
+          - autoconf
+          - gcc
+          - make
+          - wget
+          - unzip
+          - apache2
+          - php
+          - libgd-dev
+          - libssl-dev
+          - bc
+          - gawk
+          - build-essential
+          - curl
+          - net-tools
+        state: present
+        update_cache: true
+
+    - name: Install Puppet 8 repository and Puppet Server
+      ansible.builtin.shell: |
+        CODENAME=$(lsb_release -cs)
+        cd /tmp
+        wget -q -O puppet8-release.deb "https://apt.puppet.com/puppet8-release-${CODENAME}.deb"
+        dpkg -i puppet8-release.deb
+        apt-get update -y
+        apt-get install -y puppet-agent puppetserver
+      args:
+        creates: /opt/puppetlabs/bin/puppetserver
+
+    - name: Tune Puppet Server JVM heap to 512m-768m
+      ansible.builtin.replace:
+        path: /etc/default/puppetserver
+        regexp: '-Xms[0-9]*[a-zA-Z]* -Xmx[0-9]*[a-zA-Z]*'
+        replace: '-Xms512m -Xmx768m'
+      notify: Restart Puppet Server
+
+    - name: Create Puppet command symlinks
+      ansible.builtin.file:
+        src: "/opt/puppetlabs/bin/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        state: link
+        force: true
+      loop:
+        - puppet
+        - puppetserver
+
+    - name: Deploy Puppet manifests and security_baseline module
+      ansible.builtin.copy:
+        src: "../../puppet/"
+        dest: "/etc/puppetlabs/code/environments/production/"
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Start and enable Puppet Server service
+      ansible.builtin.systemd:
+        name: puppetserver
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Restart Puppet Server
+      ansible.builtin.systemd:
+        name: puppetserver
+        state: restarted
+
+# ------------------------------------------------------------------------------
+# Stage 3: Managed Client Setup (Puppet Agent + NRPE)
+# ------------------------------------------------------------------------------
+- name: "Stage 3: Provision Managed Client (Instance 2)"
+  hosts: client_nodes
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Install Puppet Agent, NRPE daemon, and security dependencies
+      ansible.builtin.apt:
+        name:
+          - nagios-nrpe-server
+          - nagios-plugins
+          - auditd
+          - systemd-timesyncd
+        state: present
+        update_cache: true
+
+    - name: Deploy custom compliance audit probes to /usr/local/lib/nagios/plugins/
+      ansible.builtin.copy:
+        src: "../../scripts/{{ item }}"
+        dest: "/usr/local/lib/nagios/plugins/{{ item }}"
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - check_ssh_security.sh
+        - check_services.sh
+        - check_file_permissions.sh
+        - check_security_baseline.sh
+
+    - name: Authorize Management Server Private IP in nrpe.cfg
+      ansible.builtin.replace:
+        path: /etc/nagios/nrpe.cfg
+        regexp: '^allowed_hosts=.*'
+        replace: "allowed_hosts=127.0.0.1,::1,{{ hostvars[groups['mgmt_server'][0]]['private_ip'] }}"
+      notify: Restart NRPE
+
+    - name: Configure passwordless sudo for nagios audit user
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/nagios_compliance
+        content: "nagios ALL=(ALL) NOPASSWD: /usr/local/lib/nagios/plugins/check_*.sh\n"
+        mode: "0440"
+        validate: "visudo -cf %s"
+
+    - name: Register custom compliance check commands in nrpe.cfg
+      ansible.builtin.blockinfile:
+        path: /etc/nagios/nrpe.cfg
+        block: |
+          command[check_load]=/usr/lib/nagios/plugins/check_load -r -w 5.0,4.0,3.0 -c 10.0,8.0,6.0
+          command[check_disk]=/usr/lib/nagios/plugins/check_disk -w 20% -c 10% -p /
+          command[check_puppet_agent]=/usr/lib/nagios/plugins/check_procs -c 1:1 -C puppet
+          command[check_ssh_security]=sudo /usr/local/lib/nagios/plugins/check_ssh_security.sh
+          command[check_services]=sudo /usr/local/lib/nagios/plugins/check_services.sh
+          command[check_file_permissions]=sudo /usr/local/lib/nagios/plugins/check_file_permissions.sh
+          command[check_security_baseline]=sudo /usr/local/lib/nagios/plugins/check_security_baseline.sh
+        marker: "# {mark} ANSIBLE MANAGED DEVOPS COMMANDS"
+      notify: Restart NRPE
+
+    - name: Start and enable NRPE service
+      ansible.builtin.systemd:
+        name: nagios-nrpe-server
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Restart NRPE
+      ansible.builtin.systemd:
+        name: nagios-nrpe-server
+        state: restarted

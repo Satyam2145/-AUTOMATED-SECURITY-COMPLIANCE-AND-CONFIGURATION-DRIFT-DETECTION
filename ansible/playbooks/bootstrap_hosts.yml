@@ -1,0 +1,43 @@
+---
+# ==============================================================================
+# Playbook: bootstrap_hosts.yml
+# Purpose: Configures system hostnames and /etc/hosts private DNS resolution
+#          dynamically across all nodes in the Ansible inventory.
+# ==============================================================================
+- name: Configure Internal Network and Hostnames
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Set system hostname
+      ansible.builtin.hostname:
+        name: "{{ 'puppetmaster.ec2.internal' if 'mgmt_server' in group_names else 'client.ec2.internal' }}"
+
+    - name: Ensure standard localhost entries exist in /etc/hosts
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        line: "127.0.0.1 localhost"
+        state: present
+
+    - name: Add Puppet Master mapping to /etc/hosts
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        line: "{{ hostvars[groups['mgmt_server'][0]]['private_ip'] }} puppetmaster.ec2.internal puppetmaster puppet"
+        state: present
+
+    - name: Add Managed Client mapping to /etc/hosts
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        line: "{{ hostvars[groups['client_nodes'][0]]['private_ip'] }} client.ec2.internal client"
+        state: present
+
+    - name: Test internal reachability between instances
+      ansible.builtin.command:
+        cmd: "ping -c 2 {{ hostvars[groups['mgmt_server'][0]]['private_ip'] }}"
+      register: ping_result
+      changed_when: false
+
+    - name: Display ping status
+      ansible.builtin.debug:
+        msg: "Internal network latency verified to {{ hostvars[groups['mgmt_server'][0]]['private_ip'] }}"

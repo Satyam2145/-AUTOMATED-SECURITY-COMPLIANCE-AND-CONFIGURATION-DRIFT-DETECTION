@@ -1,0 +1,38 @@
+---
+# ==============================================================================
+# Playbook: remediate_drift.yml
+# Purpose: Triggers Puppet Agent convergence across the fleet to restore the
+#          authoritative security baseline and eliminate configuration drift.
+# ==============================================================================
+- name: Orchestrate Fleet Configuration Remediation
+  hosts: client_nodes
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Trigger Puppet Agent State Convergence
+      ansible.builtin.command:
+        cmd: /opt/puppetlabs/bin/puppet agent -t
+      register: puppet_run
+      failed_when: puppet_run.rc not in [0, 2] # 0 = no changes, 2 = changes applied successfully
+      changed_when: puppet_run.rc == 2
+
+    - name: Display Puppet Convergence Results
+      ansible.builtin.debug:
+        msg:
+          - "========================================================================"
+          - " Remediation Status: {{ 'STATE RESTORED (Changes Applied)' if puppet_run.rc == 2 else 'ALREADY COMPLIANT (0 Changes)' }}"
+          - " Output:"
+          - "{{ puppet_run.stdout_lines }}"
+          - "========================================================================"
+
+    - name: Run post-remediation compliance verification
+      ansible.builtin.command:
+        cmd: /usr/local/lib/nagios/plugins/check_security_baseline.sh
+      register: verify_run
+      failed_when: verify_run.rc != 0
+      changed_when: false
+
+    - name: Confirm Golden Baseline Recovery
+      ansible.builtin.debug:
+        msg: "SUCCESS: Node {{ inventory_hostname }} is 100% compliant with the security baseline."

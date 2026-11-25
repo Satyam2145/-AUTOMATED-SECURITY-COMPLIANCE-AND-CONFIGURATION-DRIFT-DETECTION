@@ -1,0 +1,33 @@
+---
+# ==============================================================================
+# Playbook: audit_compliance.yml
+# Purpose: Executes compliance probes across all managed nodes and displays
+#          a consolidated, color-coded security audit report.
+# ==============================================================================
+- name: Fleet-Wide Security Compliance Audit
+  hosts: client_nodes
+  become: true
+  gather_facts: false
+
+  tasks:
+    - name: Execute Comprehensive Security Baseline Audit Probe
+      ansible.builtin.command:
+        cmd: /usr/local/lib/nagios/plugins/check_security_baseline.sh
+      register: audit_result
+      failed_when: false
+      changed_when: false
+
+    - name: Display Security Baseline Status
+      ansible.builtin.debug:
+        msg:
+          - "========================================================================"
+          - " Node: {{ inventory_hostname }} ({{ ansible_host }})"
+          - " Compliance State: {{ 'OK (COMPLIANT)' if audit_result.rc == 0 else ('WARNING' if audit_result.rc == 1 else 'CRITICAL (DRIFTED)') }}"
+          - " Exit Code: {{ audit_result.rc }}"
+          - " Output: {{ audit_result.stdout_lines }}"
+          - "========================================================================"
+
+    - name: Fail task if system has drifted from golden baseline
+      ansible.builtin.fail:
+        msg: "CRITICAL: Node {{ inventory_hostname }} has drifted from the approved security baseline!"
+      when: audit_result.rc == 2
