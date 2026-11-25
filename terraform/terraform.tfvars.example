@@ -1,0 +1,25 @@
+# ==============================================================================
+# Terraform Variables Example: terraform.tfvars.example
+# Copy this file to terraform.tfvars and customize your deployment
+# ==============================================================================
+
+# AWS Region where resources will be provisioned
+aws_region = "ap-south-1"
+
+# Project tag prefix
+project_name = "sec-compliance"
+
+# Name of your existing AWS SSH Key Pair (without .pem extension)
+key_name = "devops-sec-key"
+
+# Restrict SSH (22) and Nagios Web (80) to your specific workstation public IP
+# Retrieve your public IP via: curl -s https://checkip.amazonaws.com
+admin_ip = "0.0.0.0/0" # Change to "YOUR_PUBLIC_IP/32" for production security
+
+# EC2 Instance Sizing
+mgmt_instance_type   = "t3.medium"
+client_instance_type = "t3.micro"
+
+# Storage Allocation in GB (gp3)
+mgmt_volume_size   = 30
+client_volume_size = 20
